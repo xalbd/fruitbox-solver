@@ -77,7 +77,12 @@ for i, contour in enumerate(contours):
     if hierarchy[0][i][3] < 0:
         continue
     x, y, w, h = cv2.boundingRect(contour)
-    grab = thresh[y : y + h, x : x + h]
+    grab = thresh[y : y + h, x : x + w]
+    grab = cv2.resize(grab, (25, 35))
+    cv2.imwrite(f"{i}.png", grab)
+
+    cv2.imshow("grab", grab)
+    cv2.waitKey(0)
 
     output = pytesseract.image_to_string(
         grab,
