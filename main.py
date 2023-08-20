@@ -1,48 +1,50 @@
 import cv2
 import numpy as np
+import pyautogui
+import time
+import pyscreeze
+import PIL
 
-# Load image
-image = cv2.imread("img/test.png")
+# Fix for pyscreeze bug, TODO: remove once bug is fixed
+__PIL_TUPLE_VERSION = tuple(int(x) for x in PIL.__version__.split("."))
+pyscreeze.PIL__version__ = __PIL_TUPLE_VERSION
+
+# Pause program to allow user to start game/switch windows and take screenshot
+# time.sleep(2)
+# image = cv2.cvtColor(np.array(pyautogui.screenshot()), code=cv2.COLOR_RGB2GRAY)
+
+# Test with static image
+image = cv2.imread("img/test_2.png", flags=cv2.IMREAD_GRAYSCALE)
 
 # Detect edges & contours
-gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-edged = cv2.Canny(gray, 50, 270)
-contours, hierarchy = cv2.findContours(edged, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+edge_detection = cv2.Canny(image, 50, 270)
+contours = cv2.findContours(edge_detection, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]
 
 # Find the largest contour (should be game window)
-largest_contour = [0, 0, 0, 0]
-for contour in contours:
-    (x, y, w, h) = cv2.boundingRect(contour)
-    if w * h > largest_contour[2] * largest_contour[3]:
-        largest_contour = [x, y, w, h]
+largest_contour = cv2.boundingRect(
+    sorted(contours, key=lambda x: cv2.boundingRect(x)[2] * cv2.boundingRect(x)[3])[-1]
+)
 
-# Crop only apples from game window
-x_offset, y_offset = int(0.09 * largest_contour[2]), int(0.12 * largest_contour[3])
+# Crop apples from game window
+game_window_x_offset, game_window_y_offset = int(0.09 * largest_contour[2]), int(
+    0.12 * largest_contour[3]
+)
 game_window = [
-    largest_contour[0] + int(0.09 * largest_contour[2]),
-    largest_contour[1] + int(0.12 * largest_contour[3]),
-    largest_contour[2] - 2 * int(0.09 * largest_contour[2]),
-    largest_contour[3] - 2 * int(0.12 * largest_contour[3]),
+    largest_contour[0] + game_window_x_offset,
+    largest_contour[1] + game_window_y_offset,
+    largest_contour[2] - 2 * game_window_x_offset,
+    largest_contour[3] - 2 * game_window_y_offset,
 ]
-gameplay = gray[
+gameplay = image[
     game_window[1] : game_window[1] + game_window[3],
     game_window[0] : game_window[0] + game_window[2],
 ]
 
 # Process apples to get black numbers over white background
-ret, thresh = cv2.threshold(gameplay, 160, 255, cv2.THRESH_BINARY_INV)
-num_components, labels, stats, centroids = cv2.connectedComponentsWithStats(~thresh, connectivity=4)
-sizes = stats[:, cv2.CC_STAT_AREA]
-max_label, max_size = 0, sizes[0]
-for i in range(1, num_components):
-    if sizes[i] > max_size:
-        max_size = sizes[i]
-        max_label = i
-mask = np.zeros(labels.shape, dtype=np.uint8)
-mask[labels == max_label] = 255
-thresh = cv2.bitwise_xor(thresh, mask)
+thresh = cv2.threshold(gameplay, 160, 255, cv2.THRESH_BINARY_INV)[1]
+cv2.floodFill(thresh, None, seedPoint=(0, 0), newVal=255)
 
-# Form rows using morphological open and floodfill for numbering
+# Form rows using morphological open and floodfill to number 1-10
 row_structuring_element = cv2.getStructuringElement(cv2.MORPH_RECT, (1000, 1))
 rows = cv2.morphologyEx(thresh, op=cv2.MORPH_OPEN, kernel=row_structuring_element)
 row_count = 0
@@ -54,7 +56,7 @@ if row_count != 10:
     print(f"{row_count} rows found instead of 10, exiting")
     exit(1)
 
-# Form columns using morphological open and floodfill for numbering
+# Form columns using morphological open and floodfill to number 1-17
 col_structuring_element = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1000))
 cols = cv2.morphologyEx(thresh, op=cv2.MORPH_OPEN, kernel=col_structuring_element)
 col_count = 0
@@ -79,17 +81,11 @@ for i, contour in enumerate(contours):
     if hierarchy[0][i][3] < 0:
         continue
 
+    # Grab selected number from bounding rectangle and resize to match sample images
     x, y, w, h = cv2.boundingRect(contour)
     grab = cv2.resize(thresh[y : y + h, x : x + w], (25, 35))
 
-    decision, min_diff = 0, float("inf")
-    for num in range(1, 10):
-        matching_result = cv2.matchTemplate(grab, data[num - 1], cv2.TM_SQDIFF)
-        min_val = cv2.minMaxLoc(matching_result)[0]
-        if min_val < min_diff:
-            min_diff = min_val
-            decision = num
-
-    values[rows[y + h // 2][x + w // 2] - 1][cols[y + h // 2][x + w // 2] - 1] = decision
+    decision = min(range(9), key=lambda x: np.min(cv2.matchTemplate(grab, data[x], cv2.TM_SQDIFF)))
+    values[rows[y + h // 2][x + w // 2] - 1][cols[y + h // 2][x + w // 2] - 1] = decision + 1
 
 print(values)
