@@ -9,18 +9,23 @@ import PIL
 __PIL_TUPLE_VERSION = tuple(int(x) for x in PIL.__version__.split("."))
 pyscreeze.PIL__version__ = __PIL_TUPLE_VERSION
 
+# Pytautogui failsafe
+pyautogui.FAILSAFE = True
+pyautogui.PAUSE = 0.15
+
 # Pause program to allow user to start game/switch windows and take screenshot
-# time.sleep(2)
-# image = cv2.cvtColor(np.array(pyautogui.screenshot()), code=cv2.COLOR_RGB2GRAY)
+time.sleep(2)
+image = cv2.cvtColor(np.array(pyautogui.screenshot()), code=cv2.COLOR_RGB2GRAY)
 
 # Test with static image
-image = cv2.imread("img/test_2.png", flags=cv2.IMREAD_GRAYSCALE)
+# image = cv2.imread("img/game.png", flags=cv2.IMREAD_GRAYSCALE)
 
 # Detect edges & contours
 edge_detection = cv2.Canny(image, 50, 270)
-contours = cv2.findContours(edge_detection, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]
+contours = cv2.findContours(edge_detection, mode=cv2.RETR_TREE, method=cv2.CHAIN_APPROX_SIMPLE)[0]
 
 # Find the largest contour (should be game window)
+# TODO: loop through all contours by size and find first one with correct r/c count
 largest_contour = cv2.boundingRect(
     sorted(contours, key=lambda x: cv2.boundingRect(x)[2] * cv2.boundingRect(x)[3])[-1]
 )
@@ -69,13 +74,14 @@ if col_count != 17:
     exit(1)
 
 # Load images of numbers 1-9
-data = [cv2.imread(f"data/{i}.png", cv2.IMREAD_GRAYSCALE) for i in range(1, 10)]
+data = [cv2.imread(f"data/{i}.png", flags=cv2.IMREAD_GRAYSCALE) for i in range(1, 10)]
 
 # Grab contours of numbers
-contours, hierarchy = cv2.findContours(thresh, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+contours, hierarchy = cv2.findContours(thresh, mode=cv2.RETR_CCOMP, method=cv2.CHAIN_APPROX_SIMPLE)
 
 # Process each number and locate/store using pre-calculated rows/cols
-values = np.zeros((10, 17))
+pixelRatio = pyautogui.screenshot().size[0] / pyautogui.size().width
+values = np.zeros((10, 17, 3), dtype=np.uint16)
 for i, contour in enumerate(contours):
     # Skip contours that are inside other contours (may grab hole of an 8, for instance)
     if hierarchy[0][i][3] < 0:
@@ -85,7 +91,16 @@ for i, contour in enumerate(contours):
     x, y, w, h = cv2.boundingRect(contour)
     grab = cv2.resize(thresh[y : y + h, x : x + w], (25, 35))
 
-    decision = min(range(9), key=lambda x: np.min(cv2.matchTemplate(grab, data[x], cv2.TM_SQDIFF)))
-    values[rows[y + h // 2][x + w // 2] - 1][cols[y + h // 2][x + w // 2] - 1] = decision + 1
+    decision = min(
+        range(9), key=lambda x: np.min(cv2.matchTemplate(grab, templ=data[x], method=cv2.TM_SQDIFF))
+    )
+    values[rows[y + h // 2][x + w // 2] - 1][cols[y + h // 2][x + w // 2] - 1] = [
+        decision + 1,
+        (game_window[0] + x + w // 2) // pixelRatio,
+        (game_window[1] + y + h // 2) // pixelRatio,
+    ]
 
 print(values)
+
+unique, counts = np.unique(values[:, :, 0], return_counts=True)
+print(dict(zip(unique, counts)))
