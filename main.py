@@ -3,7 +3,7 @@ import pytesseract
 import numpy as np
 
 # Load image
-image = cv2.imread("img/game_big.png")
+image = cv2.imread("img/test.png")
 
 # Detect edges & contours
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -67,6 +67,9 @@ if col_count != 17:
     print(f"{col_count} cols found instead of 17, exiting")
     exit(1)
 
+# Load images of numbers 1-9
+data = [cv2.imread(f"data/{i}.png", cv2.IMREAD_GRAYSCALE) for i in range(1, 10)]
+
 # Grab contours of numbers
 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -76,21 +79,18 @@ for i, contour in enumerate(contours):
     # Skip contours that are inside other contours (may grab hole of an 8, for instance)
     if hierarchy[0][i][3] < 0:
         continue
+
     x, y, w, h = cv2.boundingRect(contour)
-    grab = thresh[y : y + h, x : x + w]
-    grab = cv2.resize(grab, (25, 35))
-    cv2.imwrite(f"{i}.png", grab)
+    grab = cv2.resize(thresh[y : y + h, x : x + w], (25, 35))
 
-    cv2.imshow("grab", grab)
-    cv2.waitKey(0)
+    decision, min_diff = 0, float("inf")
+    for num in range(1, 10):
+        matching_result = cv2.matchTemplate(grab, data[num - 1], cv2.TM_SQDIFF)
+        min_val = cv2.minMaxLoc(matching_result)[0]
+        if min_val < min_diff:
+            min_diff = min_val
+            decision = num
 
-    output = pytesseract.image_to_string(
-        grab,
-        config="--psm 10 --oem 1 -c tessedit_char_whitelist=0123456789",
-    )
-
-    values[rows[y + h // 2][x + w // 2] - 1][cols[y + h // 2][x + w // 2] - 1] = (
-        int(output) if output else 0
-    )
+    values[rows[y + h // 2][x + w // 2] - 1][cols[y + h // 2][x + w // 2] - 1] = decision
 
 print(values)
