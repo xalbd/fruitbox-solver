@@ -7,7 +7,7 @@ This auto-playing bot utilizes Python and OpenCV to automatically solve the [Fru
 Usage requires Python 3.11. Install the requirements with
 
 ```
-pip3 install requirements.txt
+pip3 install -r requirements.txt
 ```
 
 Run the program with
