@@ -3,14 +3,10 @@ import pytesseract
 import numpy as np
 
 # Load image
-image = cv2.imread("img/game.png")
-
-# Crop image slightly to remove edges of screen (may cause erroneous detection)
-image_h, image_w = image.shape[0], image.shape[1]
-crop = image[int(0.02 * image_h) : int(0.98 * image_h), int(0.02 * image_w) : int(0.98 * image_w)]
+image = cv2.imread("img/game_big.png")
 
 # Detect edges & contours
-gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 edged = cv2.Canny(gray, 50, 270)
 contours, hierarchy = cv2.findContours(edged, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -21,24 +17,20 @@ for contour in contours:
     if w * h > largest_contour[2] * largest_contour[3]:
         largest_contour = [x, y, w, h]
 
-# Grab game window and resize to multiple of known canvas dimension
+# Crop only apples from game window
+x_offset, y_offset = int(0.09 * largest_contour[2]), int(0.12 * largest_contour[3])
+game_window = [
+    largest_contour[0] + int(0.09 * largest_contour[2]),
+    largest_contour[1] + int(0.12 * largest_contour[3]),
+    largest_contour[2] - 2 * int(0.09 * largest_contour[2]),
+    largest_contour[3] - 2 * int(0.12 * largest_contour[3]),
+]
 gameplay = gray[
-    largest_contour[1] : largest_contour[1] + largest_contour[3],
-    largest_contour[0] : largest_contour[0] + largest_contour[2],
+    game_window[1] : game_window[1] + game_window[3],
+    game_window[0] : game_window[0] + game_window[2],
 ]
-resize_factor = 2.2
-gameplay = cv2.resize(
-    gameplay, (int(720 * resize_factor), int(470 * resize_factor)), interpolation=cv2.INTER_CUBIC
-)
-gameplay = gameplay[
-    int(70 * resize_factor) : int(415 * resize_factor),
-    int(69 * resize_factor) : int(632 * resize_factor),
-]
-char_width = gameplay.shape[1] // 17
-char_height = gameplay.shape[0] // 10
 
-
-# Process game window image to get black numbers over white background
+# Process apples to get black numbers over white background
 ret, thresh = cv2.threshold(gameplay, 160, 255, cv2.THRESH_BINARY_INV)
 num_components, labels, stats, centroids = cv2.connectedComponentsWithStats(~thresh, connectivity=4)
 sizes = stats[:, cv2.CC_STAT_AREA]
@@ -51,96 +43,49 @@ mask = np.zeros(labels.shape, dtype=np.uint8)
 mask[labels == max_label] = 255
 thresh = cv2.bitwise_xor(thresh, mask)
 
-# Process by individual character
-# for i in range(10):
-#     for j in range(17):
-#         height_offset = int(0.1 * char_height)
-#         width_offset = int(0.1 * char_width)
-#         single = thresh[
-#             i * char_height + height_offset : (i + 1) * char_height - 2 * height_offset,
-#             j * char_width + width_offset : (j + 1) * char_width - 2 * width_offset,
-#         ]
-#         result = pytesseract.image_to_data(
-#             single,
-#             config="--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789",
-#             output_type=pytesseract.Output.DICT,
-#         )
-#         print(result)
+# Form rows using morphological open and floodfill for numbering
+row_structuring_element = cv2.getStructuringElement(cv2.MORPH_RECT, (1000, 1))
+rows = cv2.morphologyEx(thresh, op=cv2.MORPH_OPEN, kernel=row_structuring_element)
+row_count = 0
+for r in range(rows.shape[0]):
+    if rows[r][rows.shape[1] // 2] == 0:
+        row_count += 1
+        cv2.floodFill(rows, None, seedPoint=(rows.shape[1] // 2, r), newVal=row_count)
+if row_count != 10:
+    print(f"{row_count} rows found instead of 10, exiting")
+    exit(1)
 
-#         number_boxes = len(result["text"])
-#         print(number_boxes)
-#         for k in range(number_boxes):
-#             (x, y, width, height) = (
-#                 result["left"][k],
-#                 result["top"][k],
-#                 result["width"][k],
-#                 result["height"][k],
-#             )
-#             single = cv2.rectangle(single, (x, y), (x + width, y + height), (0, 255, 0), 2)
-#             single = cv2.putText(
-#                 single,
-#                 result["text"][k],
-#                 (x, y + height + 20),
-#                 cv2.FONT_HERSHEY_SIMPLEX,
-#                 0.7,
-#                 (0, 255, 0),
-#                 2,
-#             )
-#             cv2.imshow(f"{i}, {j}", single)
-#         cv2.waitKey(0)
+# Form columns using morphological open and floodfill for numbering
+col_structuring_element = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1000))
+cols = cv2.morphologyEx(thresh, op=cv2.MORPH_OPEN, kernel=col_structuring_element)
+col_count = 0
+for c in range(rows.shape[1]):
+    if cols[rows.shape[0] // 2][c] == 0:
+        col_count += 1
+        cv2.floodFill(cols, None, seedPoint=(c, rows.shape[0] // 2), newVal=col_count)
+if col_count != 17:
+    print(f"{col_count} cols found instead of 17, exiting")
+    exit(1)
 
+# Grab contours of numbers
 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-opt = [[[" "] for i in range(17)] for j in range(10)]
-loc = 0
-for i, cnt in enumerate(contours[1:]):
+
+# Process each number and locate/store using pre-calculated rows/cols
+values = np.zeros((10, 17))
+for i, contour in enumerate(contours):
+    # Skip contours that are inside other contours (may grab hole of an 8, for instance)
     if hierarchy[0][i][3] < 0:
         continue
-    i += 1
-    x, y, w, h = cv2.boundingRect(cnt)
-    print(h)
-    x_offset = int(w * 0.2)
-    y_offset = int(h * 0.2)
-    x -= x_offset
-    y -= y_offset
-    w += 2 * x_offset
-    h += 2 * y_offset
-    roi = thresh[y : y + h, x : x + w]
+    x, y, w, h = cv2.boundingRect(contour)
+    grab = thresh[y : y + h, x : x + h]
+
     output = pytesseract.image_to_string(
-        roi,
+        grab,
         config="--psm 10 --oem 1 -c tessedit_char_whitelist=0123456789",
     )
-    opt[loc // 17][loc % 17] = output
-    loc += 1
-    print(output)
 
+    values[rows[y + h // 2][x + w // 2] - 1][cols[y + h // 2][x + w // 2] - 1] = (
+        int(output) if output else 0
+    )
 
-# OCR for text (apple data)
-result = pytesseract.image_to_data(
-    thresh,
-    config="--psm 6 --oem 3 -c tessedit_char_whitelist=0123456789",
-    output_type=pytesseract.Output.DICT,
-)
-print(result)
-
-number_boxes = len(result["text"])
-for i in range(number_boxes):
-    if True:
-        (x, y, width, height) = (
-            result["left"][i],
-            result["top"][i],
-            result["width"][i],
-            result["height"][i],
-        )
-        thresh = cv2.rectangle(thresh, (x, y), (x + width, y + height), (0, 255, 0), 2)
-        thresh = cv2.putText(
-            thresh,
-            result["text"][i],
-            (x, y + height + 20),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (0, 255, 0),
-            2,
-        )
-
-cv2.imshow("image", thresh)
-cv2.waitKey(0)
+print(values)
