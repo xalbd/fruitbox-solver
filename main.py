@@ -13,65 +13,69 @@ pyscreeze.PIL__version__ = __PIL_TUPLE_VERSION
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.15
 
-# Pause program to allow user to start game/switch windows and take screenshot
-time.sleep(2)
-image = cv2.cvtColor(np.array(pyautogui.screenshot()), code=cv2.COLOR_RGB2GRAY)
+while True:
+    # Pause program and grab image
+    time.sleep(1)
+    image = cv2.cvtColor(np.array(pyautogui.screenshot()), code=cv2.COLOR_RGB2GRAY)
 
-# Test with static image
-# image = cv2.imread("img/game.png", flags=cv2.IMREAD_GRAYSCALE)
+    # Test with static image
+    # image = cv2.imread("img/game.png", flags=cv2.IMREAD_GRAYSCALE)
 
-# Detect edges & contours
-edge_detection = cv2.Canny(image, 50, 270)
-contours = cv2.findContours(edge_detection, mode=cv2.RETR_TREE, method=cv2.CHAIN_APPROX_SIMPLE)[0]
+    # Detect edges & contours
+    edge_detection = cv2.Canny(image, 50, 270)
+    contours = list(
+        cv2.findContours(edge_detection, mode=cv2.RETR_TREE, method=cv2.CHAIN_APPROX_SIMPLE)[0]
+    )
+    contours.sort(key=lambda x: cv2.boundingRect(x)[2] * cv2.boundingRect(x)[3], reverse=True)
 
-# Find the largest contour (should be game window)
-# TODO: loop through all contours by size and find first one with correct r/c count
-largest_contour = cv2.boundingRect(
-    sorted(contours, key=lambda x: cv2.boundingRect(x)[2] * cv2.boundingRect(x)[3])[-1]
-)
+    # Loop through contours biggest -> smallest while trying to find game window
+    for contour in contours:
+        bounding = cv2.boundingRect(contour)
 
-# Crop apples from game window
-game_window_x_offset, game_window_y_offset = int(0.09 * largest_contour[2]), int(
-    0.12 * largest_contour[3]
-)
-game_window = [
-    largest_contour[0] + game_window_x_offset,
-    largest_contour[1] + game_window_y_offset,
-    largest_contour[2] - 2 * game_window_x_offset,
-    largest_contour[3] - 2 * game_window_y_offset,
-]
-gameplay = image[
-    game_window[1] : game_window[1] + game_window[3],
-    game_window[0] : game_window[0] + game_window[2],
-]
+        # Crop apples from bounding box, assuming we've found the game window
+        game_window_x_offset, game_window_y_offset = int(0.09 * bounding[2]), int(
+            0.12 * bounding[3]
+        )
+        game_window = [
+            bounding[0] + game_window_x_offset,
+            bounding[1] + game_window_y_offset,
+            bounding[2] - 2 * game_window_x_offset,
+            bounding[3] - 2 * game_window_y_offset,
+        ]
+        gameplay = image[
+            game_window[1] : game_window[1] + game_window[3],
+            game_window[0] : game_window[0] + game_window[2],
+        ]
 
-# Process apples to get black numbers over white background
-thresh = cv2.threshold(gameplay, 160, 255, cv2.THRESH_BINARY_INV)[1]
-cv2.floodFill(thresh, None, seedPoint=(0, 0), newVal=255)
+        # Process apples to get black numbers over white background
+        thresh = cv2.threshold(gameplay, 160, 255, cv2.THRESH_BINARY_INV)[1]
+        cv2.floodFill(thresh, None, seedPoint=(0, 0), newVal=255)
 
-# Form rows using morphological open and floodfill to number 1-10
-row_structuring_element = cv2.getStructuringElement(cv2.MORPH_RECT, (1000, 1))
-rows = cv2.morphologyEx(thresh, op=cv2.MORPH_OPEN, kernel=row_structuring_element)
-row_count = 0
-for r in range(rows.shape[0]):
-    if rows[r][rows.shape[1] // 2] == 0:
-        row_count += 1
-        cv2.floodFill(rows, None, seedPoint=(rows.shape[1] // 2, r), newVal=row_count)
-if row_count != 10:
-    print(f"{row_count} rows found instead of 10, exiting")
-    exit(1)
+        # Form rows using morphological open and floodfill to number 1-10
+        row_structuring_element = cv2.getStructuringElement(cv2.MORPH_RECT, (1000, 1))
+        rows = cv2.morphologyEx(thresh, op=cv2.MORPH_OPEN, kernel=row_structuring_element)
+        row_count = 0
+        for r in range(rows.shape[0]):
+            if rows[r][rows.shape[1] // 2] == 0:
+                row_count += 1
+                cv2.floodFill(rows, None, seedPoint=(rows.shape[1] // 2, r), newVal=row_count)
 
-# Form columns using morphological open and floodfill to number 1-17
-col_structuring_element = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1000))
-cols = cv2.morphologyEx(thresh, op=cv2.MORPH_OPEN, kernel=col_structuring_element)
-col_count = 0
-for c in range(rows.shape[1]):
-    if cols[rows.shape[0] // 2][c] == 0:
-        col_count += 1
-        cv2.floodFill(cols, None, seedPoint=(c, rows.shape[0] // 2), newVal=col_count)
-if col_count != 17:
-    print(f"{col_count} cols found instead of 17, exiting")
-    exit(1)
+        # Form columns using morphological open and floodfill to number 1-17
+        col_structuring_element = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1000))
+        cols = cv2.morphologyEx(thresh, op=cv2.MORPH_OPEN, kernel=col_structuring_element)
+        col_count = 0
+        for c in range(rows.shape[1]):
+            if cols[rows.shape[0] // 2][c] == 0:
+                col_count += 1
+                cv2.floodFill(cols, None, seedPoint=(c, rows.shape[0] // 2), newVal=col_count)
+
+        # Assumes that if the processed image has 10 rows and 17 columns, we have located the game window successfully
+        if row_count == 10 and col_count == 17:
+            print("located game window, beginning analysis")
+            break
+    else:
+        continue
+    break
 
 # Load images of numbers 1-9
 data = [cv2.imread(f"data/{i}.png", flags=cv2.IMREAD_GRAYSCALE) for i in range(1, 10)]
@@ -80,7 +84,7 @@ data = [cv2.imread(f"data/{i}.png", flags=cv2.IMREAD_GRAYSCALE) for i in range(1
 contours, hierarchy = cv2.findContours(thresh, mode=cv2.RETR_CCOMP, method=cv2.CHAIN_APPROX_SIMPLE)
 
 # Process each number and locate/store using pre-calculated rows/cols
-pixelRatio = pyautogui.screenshot().size[0] / pyautogui.size().width
+pixel_ratio = pyautogui.screenshot().size[0] / pyautogui.size().width
 values = np.zeros((10, 17, 3), dtype=np.uint16)
 for i, contour in enumerate(contours):
     # Skip contours that are inside other contours (may grab hole of an 8, for instance)
@@ -96,8 +100,8 @@ for i, contour in enumerate(contours):
     )
     values[rows[y + h // 2][x + w // 2] - 1][cols[y + h // 2][x + w // 2] - 1] = [
         decision + 1,
-        (game_window[0] + x + w // 2) // pixelRatio,
-        (game_window[1] + y + h // 2) // pixelRatio,
+        (game_window[0] + x + w // 2) // pixel_ratio,
+        (game_window[1] + y + h // 2) // pixel_ratio,
     ]
 
 print(values)
