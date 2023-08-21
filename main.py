@@ -56,7 +56,7 @@ while True:
         rows = cv2.morphologyEx(thresh, op=cv2.MORPH_OPEN, kernel=row_structuring_element)
         row_count = 0
         for r in range(rows.shape[0]):
-            if rows[r][rows.shape[1] // 2] == 0:
+            if rows[r, rows.shape[1] // 2] == 0:
                 row_count += 1
                 cv2.floodFill(rows, None, seedPoint=(rows.shape[1] // 2, r), newVal=row_count)
 
@@ -65,7 +65,7 @@ while True:
         cols = cv2.morphologyEx(thresh, op=cv2.MORPH_OPEN, kernel=col_structuring_element)
         col_count = 0
         for c in range(rows.shape[1]):
-            if cols[rows.shape[0] // 2][c] == 0:
+            if cols[rows.shape[0] // 2, c] == 0:
                 col_count += 1
                 cv2.floodFill(cols, None, seedPoint=(c, rows.shape[0] // 2), newVal=col_count)
 
@@ -88,7 +88,7 @@ pixel_ratio = pyautogui.screenshot().size[0] / pyautogui.size().width
 values = np.zeros((10, 17, 3), dtype=np.uint16)
 for i, contour in enumerate(contours):
     # Skip contours that are inside other contours (may grab hole of an 8, for instance)
-    if hierarchy[0][i][3] < 0:
+    if hierarchy[0, i, 3] < 0:
         continue
 
     # Grab selected number from bounding rectangle and resize to match sample images
@@ -98,7 +98,7 @@ for i, contour in enumerate(contours):
     decision = min(
         range(9), key=lambda x: np.min(cv2.matchTemplate(grab, templ=data[x], method=cv2.TM_SQDIFF))
     )
-    values[rows[y + h // 2][x + w // 2] - 1][cols[y + h // 2][x + w // 2] - 1] = [
+    values[rows[y + h // 2][x + w // 2] - 1, cols[y + h // 2][x + w // 2] - 1] = [
         decision + 1,
         (game_window[0] + x + w // 2) // pixel_ratio,
         (game_window[1] + y + h // 2) // pixel_ratio,
@@ -109,35 +109,4 @@ unique, counts = np.unique(values[:, :, 0], return_counts=True)
 print(dict(zip(unique, counts)))
 
 drag_x_offset, drag_y_offset = int(0.25 * w), int(0.25 * h)
-while True:
-    for reach in range(1, 9):
-        print(reach)
-        for row in range(10 - reach):
-            for col in range(17):
-                if values[row : row + reach + 1, col, 0].sum() == 10:
-                    print(values[row : row + reach + 1, col, 0])
-                    values[row : row + reach + 1, col, 0] = 0
-                    pyautogui.moveTo(
-                        values[row][col][1] - drag_x_offset, values[row][col][2] - drag_y_offset
-                    )
-                    pyautogui.dragTo(
-                        values[row + reach][col][1] + drag_x_offset,
-                        values[row + reach][col][2] + drag_y_offset,
-                        duration=0.15,
-                        button="left",
-                    )
-    for reach in range(1, 16):
-        for col in range(17 - reach):
-            for row in range(10):
-                if values[row, col : col + reach + 1, 0].sum() == 10:
-                    print(values[row, col : col + reach + 1, 0])
-                    values[row, col : col + reach + 1, 0] = 0
-                    pyautogui.moveTo(
-                        values[row][col][1] - drag_x_offset, values[row][col][2] - drag_y_offset
-                    )
-                    pyautogui.dragTo(
-                        values[row][col + reach][1] + drag_x_offset,
-                        values[row][col + reach][2] + drag_y_offset,
-                        duration=0.15,
-                        button="left",
-                    )
+pyautogui.leftClick(values[0, 0, 1], values[0, 0, 2])
