@@ -105,6 +105,39 @@ for i, contour in enumerate(contours):
     ]
 
 print(values)
-
 unique, counts = np.unique(values[:, :, 0], return_counts=True)
 print(dict(zip(unique, counts)))
+
+drag_x_offset, drag_y_offset = int(0.25 * w), int(0.25 * h)
+while True:
+    for reach in range(1, 9):
+        print(reach)
+        for row in range(10 - reach):
+            for col in range(17):
+                if values[row : row + reach + 1, col, 0].sum() == 10:
+                    print(values[row : row + reach + 1, col, 0])
+                    values[row : row + reach + 1, col, 0] = 0
+                    pyautogui.moveTo(
+                        values[row][col][1] - drag_x_offset, values[row][col][2] - drag_y_offset
+                    )
+                    pyautogui.dragTo(
+                        values[row + reach][col][1] + drag_x_offset,
+                        values[row + reach][col][2] + drag_y_offset,
+                        duration=0.15,
+                        button="left",
+                    )
+    for reach in range(1, 16):
+        for col in range(17 - reach):
+            for row in range(10):
+                if values[row, col : col + reach + 1, 0].sum() == 10:
+                    print(values[row, col : col + reach + 1, 0])
+                    values[row, col : col + reach + 1, 0] = 0
+                    pyautogui.moveTo(
+                        values[row][col][1] - drag_x_offset, values[row][col][2] - drag_y_offset
+                    )
+                    pyautogui.dragTo(
+                        values[row][col + reach][1] + drag_x_offset,
+                        values[row][col + reach][2] + drag_y_offset,
+                        duration=0.15,
+                        button="left",
+                    )
