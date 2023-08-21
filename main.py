@@ -104,9 +104,56 @@ for i, contour in enumerate(contours):
         (game_window[1] + y + h // 2) // pixel_ratio,
     ]
 
+# Output generated data
 print(values)
 unique, counts = np.unique(values[:, :, 0], return_counts=True)
 print(dict(zip(unique, counts)))
 
-drag_x_offset, drag_y_offset = int(0.25 * w), int(0.25 * h)
+# Activate gameplay window
 pyautogui.leftClick(values[0, 0, 1], values[0, 0, 2])
+
+# Loop, selecting boxes that use the smallest number of apples possible
+drag_x_offset, drag_y_offset = int(0.25 * w), int(0.25 * h)
+score, target_number_apples = 0, 2
+while True:
+    found_selection = False
+    print(f"\ntarget: {target_number_apples} apples")
+    for r in range(10):
+        for c in range(17):
+            for r_size in range(1, 10 - r + 1):
+                for c_size in range(1, 17 - c + 1):
+                    if found_selection and target_number_apples > 2:
+                        break
+
+                    section = values[r : r + r_size, c : c + c_size, 0]
+                    if np.count_nonzero(section) > target_number_apples or np.sum(section) > 10:
+                        break
+
+                    elif (
+                        np.count_nonzero(section) == target_number_apples and np.sum(section) == 10
+                    ):
+                        print(np.matrix(section))
+                        section.fill(0)
+                        pyautogui.moveTo(
+                            values[r, c, 1] - drag_x_offset, values[r, c, 2] - drag_y_offset
+                        )
+                        pyautogui.dragTo(
+                            values[r + r_size - 1, c + c_size - 1, 1] + drag_x_offset,
+                            values[r + r_size - 1, c + c_size - 1, 2] + drag_y_offset,
+                            duration=0.15,
+                            button="left",
+                        )
+                        score += target_number_apples
+                        found_selection = True
+
+    if not found_selection:
+        print(f"could not find selection with {target_number_apples} apples")
+        target_number_apples += 1
+
+    if found_selection and target_number_apples > 2:
+        print(f"found selection with {target_number_apples}, dropping to 2")
+        target_number_apples = 2
+
+    if target_number_apples == 11:
+        print(f"can't find any more selections\nscore: {score}")
+        break
