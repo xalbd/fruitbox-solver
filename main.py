@@ -5,6 +5,8 @@ import time
 import pyscreeze
 import PIL
 
+from solver import find_solution
+
 # Fix for pyscreeze bug, TODO: remove once bug is fixed
 __PIL_TUPLE_VERSION = tuple(int(x) for x in PIL.__version__.split("."))
 pyscreeze.PIL__version__ = __PIL_TUPLE_VERSION
@@ -111,11 +113,12 @@ print(values)
 unique, counts = np.unique(values[:, :, 0], return_counts=True)
 print(dict(zip(unique, counts)))
 
-# Activate gameplay window
+# Activate gameplay window and set up for dragging
 pyautogui.leftClick(values[0, 0, 1], values[0, 0, 2])
-
-# Loop, selecting boxes that use the smallest number of apples possible
 drag_x_offset, drag_y_offset = int(0.25 * w), int(0.25 * h)
+values_saved = values.copy()
+
+# Attempt greedy strategy for comparison
 score, target_number_apples = 0, 2
 while True:
     found_selection = False
@@ -126,36 +129,35 @@ while True:
                 for c_size in range(1, 17 - c + 1):
                     if found_selection and target_number_apples > 2:
                         break
-
                     section = values[r : r + r_size, c : c + c_size, 0]
                     if np.count_nonzero(section) > target_number_apples or np.sum(section) > 10:
                         break
-
                     elif (
                         np.count_nonzero(section) == target_number_apples and np.sum(section) == 10
                     ):
-                        print(np.matrix(section))
+                        print(section)
+                        print(score)
                         section.fill(0)
-                        pyautogui.moveTo(
-                            values[r, c, 1] - drag_x_offset, values[r, c, 2] - drag_y_offset
-                        )
-                        pyautogui.dragTo(
-                            values[r + r_size - 1, c + c_size - 1, 1] + drag_x_offset,
-                            values[r + r_size - 1, c + c_size - 1, 2] + drag_y_offset,
-                            duration=0.15,
-                            button="left",
-                        )
                         score += target_number_apples
                         found_selection = True
-
     if not found_selection:
         print(f"could not find selection with {target_number_apples} apples")
         target_number_apples += 1
-
     if found_selection and target_number_apples > 2:
         print(f"found selection with {target_number_apples}, dropping to 2")
         target_number_apples = 2
-
     if target_number_apples == 11:
         print(f"can't find any more selections\nscore: {score}")
         break
+
+# Find optimal solution
+moves = find_solution(values_saved[:, :, 0])
+for move in moves:
+    r, c, r_size, c_size = move
+    pyautogui.moveTo(values_saved[r, c, 1] - drag_x_offset, values_saved[r, c, 2] - drag_y_offset)
+    pyautogui.dragTo(
+        values_saved[r + r_size - 1, c + c_size - 1, 1] + drag_x_offset,
+        values_saved[r + r_size - 1, c + c_size - 1, 2] + drag_y_offset,
+        duration=0.15,
+        button="left",
+    )

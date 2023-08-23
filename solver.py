@@ -4,14 +4,16 @@ import numpy as np
 def find_solution(grid: np.array):
     visit = set()
     best = [[], 0]
+    path = []
 
-    def dfs(grid: np.array, path: list, score: int):
-        nonlocal visit, best
+    def dfs(grid: np.array, score: int):
+        nonlocal visit, best, path
 
+        # Mark current grid as having been visited and check for new high score
         visit.add(grid.tobytes())
         if score > best[1]:
-            print(best)
-            best = [path, score]
+            print(f"new solution: {score}")
+            best = [path[:], score]
 
         for r in range(10):
             for c in range(17):
@@ -19,9 +21,8 @@ def find_solution(grid: np.array):
                     for c_size in range(1, 17 - c + 1):
                         section = grid[r : r + r_size, c : c + c_size]
 
-                        if np.sum(section) > 10:
+                        if np.count_nonzero(section) > 10 or np.sum(section) > 10:
                             break
-
                         elif np.sum(section) == 10:
                             old_section = section.copy()
                             section.fill(0)
@@ -29,17 +30,16 @@ def find_solution(grid: np.array):
                                 path.append((r, c, r_size, c_size))
                                 dfs(
                                     grid=grid,
-                                    path=path,
                                     score=score + np.count_nonzero(old_section),
                                 )
                                 path.pop()
-                            section = old_section
+                            grid[r : r + r_size, c : c + c_size] = old_section
                             break
 
-    dfs(grid, [], 0)
+    dfs(grid, 0)
+    print(f"calculated optimal score: {best[1]}")
+    return best[0]
 
-    return best
 
-
-# test_grid = np.random.randint(1, 10, size=(10, 17))
+# test_grid = np.resize([1, 9], 170).reshape((10, 17))
 # print(find_solution(test_grid))
