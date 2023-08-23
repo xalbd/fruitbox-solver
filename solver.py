@@ -5,9 +5,16 @@ def find_solution(grid: np.array):
     visit = set()
     best = [[], 0]
     path = []
+    explore = 0
+    last = 0
 
     def dfs(grid: np.array, score: int):
-        nonlocal visit, best, path
+        nonlocal visit, best, path, explore, last
+
+        explore += 1
+        if explore == last + 100:
+            print(explore)
+            last = explore
 
         # Mark current grid as having been visited and check for new high score
         visit.add(grid.tobytes())
@@ -41,5 +48,5 @@ def find_solution(grid: np.array):
     return best[0]
 
 
-# test_grid = np.resize([1, 9], 170).reshape((10, 17))
-# print(find_solution(test_grid))
+test_grid = np.random.randint(1, 10, (10, 17))
+print(find_solution(test_grid))
