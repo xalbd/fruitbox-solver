@@ -18,14 +18,10 @@ Run the bot with
 python3 main.py
 ```
 
-You may need to allow your terminal/IDE/etc to capture the contents of your display.
+You may need to allow your terminal/IDE/etc to capture the contents of your display and control your computer, especially if on Mac.
 
 ## Troubleshooting
 
-#### An erronous number of rows/columns of apples is detected even though the game is open
+### Nothing happens.
 
-This program processes images of the entire screen and assumes the largest bounding box of any contour detected by OpenCV is the game window. Detecting the wrong number of rows/columns of apples could indicate this process is generating an incorrect location for the game window.
-
-To fix, make the game window as large as possible while making sure the entire green border of the playfield is visible on screen.
-
-This is most easily accomplished by opening the game in a full-screen browser window, hitting the play button, alt-tabbing to run the program, and immediately alt-tabbing back.
+You may need to run your Terminal/IDE/etc in administrator mode in order to allow control of the mouse/the ability to take screenshots. In addition, check that the entire game field is visible on screen when the program is running, including the green borders.

@@ -11,11 +11,12 @@ pyscreeze.PIL__version__ = __PIL_TUPLE_VERSION
 
 # Pytautogui failsafe
 pyautogui.FAILSAFE = True
-pyautogui.PAUSE = 0.15
+
 
 while True:
     # Pause program and grab image
     time.sleep(1)
+    print("grabbing image")
     image = cv2.cvtColor(np.array(pyautogui.screenshot()), code=cv2.COLOR_RGB2GRAY)
 
     # Test with static image
@@ -74,6 +75,7 @@ while True:
             print("located game window, beginning analysis")
             break
     else:
+        print("game window not found")
         continue
     break
 
