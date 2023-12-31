@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import pyautogui
-import time
 import pyscreeze
 import PIL
 
@@ -11,24 +10,30 @@ pyscreeze.PIL__version__ = __PIL_TUPLE_VERSION
 
 # Pytautogui failsafe
 pyautogui.FAILSAFE = True
-pyautogui.PAUSE = 0.15
+pyautogui.PAUSE = 0.1
 
-print("this tool can auto-reset for a good board\n850 total is average -- <700 is good")
+# Constants
+ROWS = 10
+COLS = 17
+
+print("this tool can auto-reset for a good board")
+print(
+    "possible board scores come in jumps of 10, 850 is mean and std dev ~= 34, so <= 780 is good (Z ~= -2)"
+)
 
 while True:
     try:
-        fruit_limit = input(
-            "ENTER to disable resets for a total fruit score or type a desired score:"
+        fruit_input = input(
+            f"ENTER for no resetting or type a desired score ({ROWS * COLS} - {ROWS * COLS * 9}):"
         )
-
-        fruit_limit = 0 if fruit_limit == "" else int(fruit_limit)
+        fruit_limit = 0 if fruit_input == "" else int(fruit_input)
     except KeyboardInterrupt:
         exit()
     except:
         print("invalid input")
     else:
-        if fruit_limit != 0 and (fruit_limit < 170 or fruit_limit > 170 * 9):
-            print(f"out of range (170 - {170 * 9})")
+        if fruit_limit != 0 and (fruit_limit < ROWS * COLS or fruit_limit > ROWS * COLS * 9):
+            print(f"out of range ({ROWS * COLS} - {ROWS * COLS * 9})")
         else:
             break
 
@@ -91,7 +96,7 @@ while True:
                     cv2.floodFill(cols, None, seedPoint=(c, rows.shape[0] // 2), newVal=col_count)
 
             # Assumes that if the processed image has 10 rows and 17 columns, we have located the game window successfully
-            if row_count == 10 and col_count == 17:
+            if row_count == ROWS and col_count == COLS:
                 print("located game window, beginning analysis")
                 break
         else:
@@ -109,7 +114,7 @@ while True:
 
     # Process each number and locate/store using pre-calculated rows/cols
     pixel_ratio = pyautogui.screenshot().size[0] / pyautogui.size().width
-    values = np.zeros((10, 17, 3), dtype=np.uint16)
+    values = np.zeros((ROWS, COLS, 3), dtype=np.uint16)
     for i, contour in enumerate(contours):
         # Skip contours that are inside other contours (may grab hole of an 8, for instance)
         if hierarchy[0, i, 3] < 0:
@@ -142,34 +147,32 @@ while True:
         break
     else:
         print("resetting")
-        pyautogui.leftClick(values[9, 0, 1], values[9, 0, 2] + 2 * h)
-        pyautogui.leftClick(values[5, 4, 1], values[5, 4, 2])
-        pyautogui.moveTo(10, 10)  # avoid pyautogui failsafe
+        pyautogui.leftClick(values[9, 0, 1], values[9, 0, 2] + 2 * h)  # reset button
+        pyautogui.leftClick(values[5, 4, 1], values[5, 4, 2])  # play button
+        pyautogui.moveTo(10, 10)  # avoid pyautogui failsafe while remaining out of screenshot
 
 # Loop, selecting boxes that use the smallest number of apples possible
-drag_x_offset, drag_y_offset = int(0.25 * w), int(0.25 * h)
+drag_x_offset, drag_y_offset = int(0.3 * w), int(0.3 * h)
 score, target_number_apples = 0, 2
 while True:
     found_selection = False
     print(f"\ntarget: {target_number_apples} apples")
-    for r in range(10):
-        for c in range(17):
-            for r_size in range(1, 10 - r + 1):
-                for c_size in range(1, 17 - c + 1):
+    for r in range(ROWS):
+        for c in range(COLS):
+            for r_size in range(1, ROWS - r + 1):
+                for c_size in range(1, COLS - c + 1):
                     if found_selection and target_number_apples > 2:
                         break
 
                     section = values[r : r + r_size, c : c + c_size, 0]
-                    if (
-                        np.count_nonzero(section) > target_number_apples
-                        or np.sum(section) > 10
-                        or np.count_nonzero(section[0, :]) == 0
-                        or np.count_nonzero(section[:, 0]) == 0
-                    ):
+                    if np.count_nonzero(section) > target_number_apples or np.sum(section) > 10:
                         break
 
                     elif (
-                        np.count_nonzero(section) == target_number_apples and np.sum(section) == 10
+                        np.count_nonzero(section) == target_number_apples
+                        and np.sum(section) == 10
+                        and np.count_nonzero((section[0, :])) != 0
+                        and np.count_nonzero((section[:, 0])) != 0
                     ):
                         print(np.matrix(section))
                         section.fill(0)
@@ -179,7 +182,7 @@ while True:
                         pyautogui.dragTo(
                             values[r + r_size - 1, c + c_size - 1, 1] + drag_x_offset,
                             values[r + r_size - 1, c + c_size - 1, 2] + drag_y_offset,
-                            duration=0.15,
+                            duration=0.2,
                             button="left",
                         )
                         score += target_number_apples
